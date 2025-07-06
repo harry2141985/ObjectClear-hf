@@ -464,7 +464,6 @@ class ObjectClearPipeline(
 
 
     @classmethod
-    @classmethod
     def from_pretrained_with_custom_modules(
         cls,
         pretrained_model_name_or_path,
@@ -500,6 +499,9 @@ class ObjectClearPipeline(
             cache_dir=cache_dir,
             **kwargs,
         )
+        
+        if torch_dtype is not None:
+            pipe.to(dtype=torch_dtype)
 
         return pipe
     
