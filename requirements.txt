@@ -1,0 +1,10 @@
+torch==2.2.0
+torchvision
+numpy==1.26.4
+opencv-python
+pillow
+transformers
+scipy
+diffusers
+segment-anything
+matplotlib
