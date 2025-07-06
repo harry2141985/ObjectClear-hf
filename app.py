@@ -2,19 +2,16 @@ import gradio as gr
 import os 
 from PIL import Image
 import torch
-from diffusers.utils import load_image, check_min_version
+from diffusers.utils import check_min_version
 from pipeline_objectclear import ObjectClearPipeline
 from tools.download_util import load_file_from_url
 from tools.painter import mask_painter
 import argparse
-from safetensors.torch import load_file
-from model import CLIPImageEncoder, PostfuseModule
 import numpy as np
 import torchvision.transforms.functional as TF
 from scipy.ndimage import convolve, zoom
 import cv2
 import time
-from huggingface_hub import hf_hub_download
 import spaces
 
 from tools.interact_tools import SamControler
@@ -284,8 +281,7 @@ pipe = ObjectClearPipeline.from_pretrained_with_custom_modules(
     "jixin0101/ObjectClear",
     torch_dtype=torch.float16,
     variant='fp16',
-    save_cross_attn=True,
-    cache_dir="/home/jovyan/shared/jixinzhao/models",
+    save_cross_attn=True
 )
 
 pipe.to(device)

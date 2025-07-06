@@ -60,7 +60,6 @@ from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffus
 from model import CLIPImageEncoder, PostfuseModule
 import gc
 import torch.nn.functional as F
-import cv2
 
 
 if is_invisible_watermark_available():
