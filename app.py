@@ -283,6 +283,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 pipe = ObjectClearPipeline.from_pretrained_with_custom_modules(
     "jixin0101/ObjectClear",
     torch_dtype=torch.float16,
+    variant='fp16',
     save_cross_attn=True,
     cache_dir="/home/jovyan/shared/jixinzhao/models",
 )

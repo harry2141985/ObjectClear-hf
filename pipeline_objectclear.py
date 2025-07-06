@@ -469,6 +469,7 @@ class ObjectClearPipeline(
         pretrained_model_name_or_path,
         torch_dtype=torch.float32,
         cache_dir=None,
+        variant=None,
         **kwargs,
     ):
         from safetensors.torch import load_file
@@ -497,6 +498,7 @@ class ObjectClearPipeline(
             image_prompt_encoder=image_prompt_encoder,
             postfuse_module=postfuse_module,
             cache_dir=cache_dir,
+            variant=variant,
             **kwargs,
         )
         
