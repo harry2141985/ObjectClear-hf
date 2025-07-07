@@ -248,7 +248,7 @@ description = r"""
 🔥 ObjectClear is an object removal model that can jointly eliminate the target object and its associated effects leveraging Object-Effect Attention, while preserving background consistency.<br>
 🖼️ Try to drop your image, assign the target masks with a few clicks, and get the object removal results!<br>
 
-*Note: All input images are resized so that the shorter side is 512 pixels, ensuring consistency with the 512×512 training resolution.<br>*
+*Note: All input images are temporarily resized (shorter side = 512 pixels) during inference to match the training resolution. Final outputs are restored to the original resolution.<br>*
 """
 
 article = r"""<h3>
