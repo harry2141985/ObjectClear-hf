@@ -58,6 +58,7 @@ from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusio
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
 
 from model import CLIPImageEncoder, PostfuseModule
+from utils import attention_guided_fusion
 import gc
 import torch.nn.functional as F
 
@@ -328,6 +329,10 @@ def retrieve_timesteps(
     return timesteps, num_inference_steps
 
 
+@dataclass
+class ObjectClearPipelineOutput(StableDiffusionXLPipelineOutput):
+    attns: Optional[List[PIL.Image.Image]] = None
+
 class ObjectClearPipeline(
     DiffusionPipeline,
     StableDiffusionMixin,
@@ -422,7 +427,7 @@ class ObjectClearPipeline(
         requires_aesthetics_score: bool = False,
         force_zeros_for_empty_prompt: bool = True,
         add_watermarker: Optional[bool] = None,
-        save_cross_attn: bool = False,
+        apply_attention_guided_fusion: bool = False,
     ):
         super().__init__()
 
@@ -441,7 +446,7 @@ class ObjectClearPipeline(
         )
         self.register_to_config(force_zeros_for_empty_prompt=force_zeros_for_empty_prompt)
         self.register_to_config(requires_aesthetics_score=requires_aesthetics_score)
-        self.register_to_config(save_cross_attn=save_cross_attn)
+        self.register_to_config(apply_attention_guided_fusion=apply_attention_guided_fusion)
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
         self.mask_processor = VaeImageProcessor(
@@ -455,7 +460,7 @@ class ObjectClearPipeline(
         else:
             self.watermark = None
         
-        if self.config.save_cross_attn:
+        if self.config.apply_attention_guided_fusion:
             self.cross_attention_scores = {}
             self.unet = self.unet_store_cross_attention_scores(
                 self.unet, self.cross_attention_scores
@@ -1367,6 +1372,7 @@ class ObjectClearPipeline(
         ip_adapter_image_embeds: Optional[List[torch.Tensor]] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
+        return_attn_map: bool = False,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         guidance_rescale: float = 0.0,
         original_size: Tuple[int, int] = None,
@@ -1859,7 +1865,7 @@ class ObjectClearPipeline(
             ).to(device=device, dtype=latents.dtype)
 
         self._num_timesteps = len(timesteps)
-        self.attn_map = None
+        attn_map = None
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
@@ -1906,16 +1912,16 @@ class ObjectClearPipeline(
 
                 # progressive attention mask blending
                 fuse_index = 5
-                if self.config.save_cross_attn:
+                if self.config.apply_attention_guided_fusion:
                     if i == len(timesteps) - 1:
                         attn_key, attn_map = next(iter(self.cross_attention_scores.items()))
-                        self.attn_map = self.resize_attn_map_divide2(attn_map, mask, fuse_index)
+                        attn_map = self.resize_attn_map_divide2(attn_map, mask, fuse_index)
                         init_latents_proper = image_latents
                         if self.do_classifier_free_guidance:
-                            _, init_mask = self.attn_map.chunk(2)
+                            _, init_mask = attn_map.chunk(2)
                         else:
-                            init_mask = self.attn_map
-                        self.attn_map = init_mask
+                            init_mask = attn_map
+                        attn_map = init_mask
                     self.clear_cross_attention_scores(self.cross_attention_scores)
                 
                 if num_channels_unet == 4:
@@ -1994,7 +2000,7 @@ class ObjectClearPipeline(
             if needs_upcasting:
                 self.vae.to(dtype=torch.float16)
         else:
-            return StableDiffusionXLPipelineOutput(images=latents)
+            return ObjectClearPipelineOutput(images=latents)
 
         # apply watermark if available
         if self.watermark is not None:
@@ -2004,11 +2010,39 @@ class ObjectClearPipeline(
 
         if padding_mask_crop is not None:
             image = [self.image_processor.apply_overlay(mask_image, original_image, i, crops_coords) for i in image]
+            
+        attn_pils = []
+        if output_type == "pil" and attn_map is not None:
+            for i in range(len(attn_map)):
+                attn_np = attn_map[i].mean(dim=0).cpu().numpy() * 255.
+                attn_pil = PIL.Image.fromarray(attn_np.astype(np.uint8)).convert("L")
+                attn_pils.append(attn_pil)
+            
+            original_pils = self.image_processor.postprocess(init_image, output_type="pil")
+
+            generated_pils = image
+
+            fused_images = []
+            for i in range(len(generated_pils)):
+                ori_pil = original_pils[i]
+                gen_pil = generated_pils[i]
+                attn_pil = attn_pils[i]
+
+                fused_np = attention_guided_fusion(np.array(ori_pil), np.array(gen_pil), np.array(attn_pil))
+                fused_pil = PIL.Image.fromarray(fused_np.astype(np.uint8)).resize(ori_pil.size)
+
+                fused_images.append(fused_pil)
+
+            image = fused_images
 
         # Offload all models
         self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image,)
-
-        return StableDiffusionXLPipelineOutput(images=image), self.attn_map
+    
+        if return_attn_map and len(attn_pils) > 0:
+            if not return_dict:
+                return (image, attn_pils)
+            return ObjectClearPipelineOutput(images=image, attns=attn_pils)
+        else:
+            if not return_dict:
+                return (image,)
+            return ObjectClearPipelineOutput(images=image)
