@@ -56,6 +56,7 @@ from diffusers.utils import (
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusionMixin
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
+from dataclasses import dataclass
 
 from model import CLIPImageEncoder, PostfuseModule
 from utils import attention_guided_fusion
